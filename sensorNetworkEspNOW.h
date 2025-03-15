@@ -1,5 +1,8 @@
 #ifndef __SENSORNETWORKESPNOW_H_
 #define __SENSORNETWORKESPNOW_H_
+#include "espNowMux.h"
+#include "reliableStream.h"
+
 #include <string>
 #include <vector>
 using std::string;
@@ -361,14 +364,16 @@ SchemaParser::RegisterClass SensorVariable::reg([](const string &s)->Sensor * {
     return NULL; 
 });
 
-    
+ReliableStreamESPNow fakeEspNow("SN", true);
+
+
 class FakeEspNowFifo { 
 public:
     string data;
     void write(const string &s) { data = s; }
     string read() { string rval = data; data = ""; return rval; }
 
-} fakeEspNow;
+} fakeEspNowNO;
 
 class RemoteSensorServer { 
     vector<RemoteSensorArray *> modules;
@@ -376,18 +381,19 @@ public:
     RemoteSensorServer(int espNowChannel) {}
     RemoteSensorServer(int espNowChannel, vector<RemoteSensorArray *> m) : modules(m) {}    
     void onReceive(const string &s) {
-        OUT("server on receive: %s", s.c_str());
-        string incomingMac = "";
+        OUT("%09.4f server <<<< %s", millis() / 1000.0, s.c_str());
+        string incomingMac = "", incomingHash = "";
         for(auto w : split(s, ' ')) { 
             string name = w.substr(0, w.find("="));
             string val = w.substr(w.find("=") + 1);
-            if (name == "MAC") {
-                incomingMac = val;
-                break;
-            }
+            //OUT("%s == %s", name.c_str(), val.c_str());
+            if (name == "MAC") { incomingMac = val; }
+            if (name == "SCHASH") { incomingHash = val; }
         } 
+        bool packetHandled = false;
         for(auto p : modules) { 
             if (p->mac == incomingMac) {
+                packetHandled = true;
                 string hash = p->makeHash();
                 for(auto w : split(s, ' ')) { 
                     string name = w.substr(0, w.find("="));
@@ -395,20 +401,40 @@ public:
                     if (name == "SCHASH") {
                         if (hash != val) { 
                             string out = "MAC=" + p->mac + " NEWSCHEMA=1 " + p->makeAllSchema();
-                            fakeEspNow.write(out);
+                            write(out);
                             return;
                         }
                     } else if (0) { 
                         string out = "MAC=" + p->mac + " UPDATENOW=1 ...";
-                        fakeEspNow.write(out);
+                        write(out);
                     } else { 
-                        p->parseAllResults(s);
-                        string out = "MAC=" + p->mac + " SKHASH=" + hash + " SLEEP=22 " + p->makeAllSetValues();
-                        fakeEspNow.write(out);
                     }
+                }
+                if (hash == incomingHash) { 
+                    p->parseAllResults(s);
+                    string out = "MAC=" + p->mac + " SCHASH=" + hash + " SLEEP=22 " + p->makeAllSetValues();
+                    write(out);
+                } else {
+                    OUT("%s != %s", incomingHash.c_str(), hash.c_str());
                 }
             }
         }
+        if (!packetHandled && incomingMac != "") { 
+            OUT("Unknown MAC: %s", s.c_str());
+            for(auto p : modules) { 
+                if (p->mac == "auto") {
+                    p->mac = incomingMac;
+                    string schema = p->makeAllSchema();
+                    OUT("Auto assigning incoming mac %s to sensor %s", p->mac.c_str(), schema.c_str());
+                    break;
+                }
+            }
+        }
+    }
+
+    void write(const string &s) { 
+        OUT("%09.4f server >>>> %s", millis() / 1000.0, s.c_str());
+        fakeEspNow.write(s);
     }
 
     void begin() { 
@@ -422,68 +448,97 @@ public:
     }
 };
 
-
-class FakeMac { 
-    static int debugIdIndex;
-public:
-    string mac = sfmt("FFAACCEE%02d", debugIdIndex++);
-    //string mac = getMacAddress().c_str();
-};
-int FakeMac::debugIdIndex = 0;
-
-static int debugIdIndex = 0;
 class RemoteSensorClient { 
     RemoteSensorArray *array = NULL;
-    int debugId = debugIdIndex++;
-    FakeMac fakeMac;
-    const char *myMac() { return fakeMac.mac.c_str(); }
+    string myMac() { return getMacAddress().c_str(); }
+    static SPIFFSVariable<int> lastChannel;
+    static SPIFFSVariable<string> lastSchema;
 public:
     RemoteSensorClient() { 
-        init("MAC=MAC SKHASH=SKHASH GIT=GIT MILLIS=MILLIS");
+        string s = lastSchema;
+        espNowMux.defaultChannel = lastChannel; 
+        init(s);
     }
     void init(const string &schema) { 
         if (array != NULL) delete array;
-        array = new RemoteSensorArray(myMac(), schema.c_str());
+        array = new RemoteSensorArray(myMac().c_str(), schema.c_str());
     }
     void updateFirmware() {
         // TODO
     }
     bool updateFirmwareNow = false, updateSchemaNow = false;
+    uint32_t lastReceive = 0;
     void onReceive(const string &s) { 
-        OUT("client onRecieve %s", s.c_str());
+        OUT("%09.4f client <<<< %s", millis() / 1000.0, s.c_str());
         string schash, newSchema;
-        bool updatingSchema = false;        
+        bool updatingSchema = false;   
+        int sleepTime = -1;     
         for(auto w : split(s, ' ')) { 
             if (updatingSchema) {
                 newSchema += w + " ";
             } else { 
                 string name = w.substr(0, w.find("="));
                 string val = w.substr(w.find("=") + 1);
-                if (name == "MAC" && val != myMac()) return;
+                if (name == "MAC") {
+                    if (val != myMac()) return;
+                    lastChannel = espNowMux.defaultChannel;
+                    lastReceive = millis();
+                }
                 else if (name == "NEWSCHEMA") updatingSchema = true;
                 else if (name == "UPDATENOW") updateFirmware();
+                else if (name == "SLEEP") sscanf(val.c_str(), "%d", &sleepTime);
                 // TODO: process setValues
             }
         }
         if (updatingSchema) { 
             OUT("Got new schema: %s", newSchema.c_str());
-            delete array;
-            array = new RemoteSensorArray(myMac(), newSchema.c_str());
+            init(newSchema);
+            lastSchema = newSchema;
+            string out = array->makeAllResults();
+            write(out);
             return;
         }
         if (array)
             array->parseAllSetValues(s);
+        // TODO:  Write schema and shit to SPIFF
+        if (sleepTime > 0) { 
+            OUT("%08.4f: Sleeping %d seconds...", millis() / 1000.0, sleepTime);
+            WiFi.disconnect(true);  // Disconnect from the network
+            WiFi.mode(WIFI_OFF);    // Switch WiFi off
+            int rc = esp_sleep_enable_timer_wakeup(1000000LL * sleepTime);
+            Serial.flush();
+            //esp_light_sleep_start();                                                                 
+            //esp_deep_sleep_start();
+            delay(1000 * sleepTime);                                                                 
+            ESP.restart();                                  
+        }
+    }
+    void write(const string &s) { 
+        OUT("%09.4f client >>>> %s", millis() / 1000.0, s.c_str());
+        fakeEspNow.write(s);
     }
     void run() {
         string in = fakeEspNow.read();
         if (in != "") 
             onReceive(in); 
-        if (j.secTick(10) && array != NULL) { 
+        if (array != NULL && (j.once() || j.secTick(1))) { 
             string out = array->makeAllResults();
-            fakeEspNow.write(out);
+            write(out);
         }
+        if (millis() - lastReceive > 5000) {
+            espNowMux.defaultChannel = (espNowMux.defaultChannel + 1) % 14;
+            espNowMux.stop();
+            espNowMux.firstInit = true;
+            lastReceive = millis();
+        }
+
     }
 };
+
+SPIFFSVariable<int> RemoteSensorClient::lastChannel 
+    = SPIFFSVariable<int>("/sensorNetwork_lastChannel2", 1);
+SPIFFSVariable<string> RemoteSensorClient::lastSchema 
+    = SPIFFSVariable<string>("/sensorNetwork_lastSchema", "MAC=MAC SKHASH=SKHASH GIT=GIT MILLIS=MILLIS");
 
 
 //static SchemaList::Register();

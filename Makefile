@@ -22,7 +22,7 @@ csim: ${MAIN_NAME}_csim
 	cp $< $@
 
 ${MAIN_NAME}_csim:  
-	g++ -x c++ -g ${MAIN_NAME}.ino -o $@ -DESP32 -DCSIM -DUBUNTU \
+	g++ -x c++ -g ${MAIN_NAME}.ino -o $@ -DGIT_VERSION=\"${GIT_VERSION}\" -DESP32 -DCSIM -DUBUNTU \
 	-I./ -I${HOME}/Arduino/lib -I ${HOME}/Arduino/libraries/esp32jimlib/src/ 
 
 
