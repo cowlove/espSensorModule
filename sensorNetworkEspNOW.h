@@ -8,38 +8,8 @@
 using std::string;
 using std::vector;
 
-class String;
-String getMacAddress();
-inline string sfmt(const char *format, ...); 
-float avgAnalogRead(int pin, int avg);
-
 class RemoteSensorArray;
-class Sensor;
-#if 0 
-class Sensor { 
-    public:
-    Sensor(RemoteSensorArray *) {}
-};
-class SensorDHT : public Sensor {
-public:   
-     SensorDHT(RemoteSensorArray *p, const string &name, int pin) : Sensor(p) {}
-};
 
-class SensorMAC : public Sensor {
-    public:   
-         SensorMAC(RemoteSensorArray *p) : Sensor(p) {}
-};
-
-class SensorADC : public Sensor {
-    public:   
-         SensorADC(RemoteSensorArray *p, const string &name, int pin, float scale) : Sensor(p) {}
-};
-#endif
-
-
-
-class SchemaList;
-class RemoteSensorArray;
 class Sensor { 
 friend RemoteSensorArray;
 protected:
@@ -412,7 +382,7 @@ public:
                 }
                 if (hash == incomingHash) { 
                     p->parseAllResults(s);
-                    string out = "MAC=" + p->mac + " SCHASH=" + hash + " SLEEP=22 " + p->makeAllSetValues();
+                    string out = "MAC=" + p->mac + " SCHASH=" + hash + " SLEEP=60 " + p->makeAllSetValues();
                     write(out);
                 } else {
                     OUT("%s != %s", incomingHash.c_str(), hash.c_str());
@@ -508,8 +478,8 @@ public:
             int rc = esp_sleep_enable_timer_wakeup(1000000LL * sleepTime);
             Serial.flush();
             //esp_light_sleep_start();                                                                 
-            //esp_deep_sleep_start();
-            delay(1000 * sleepTime);                                                                 
+            esp_deep_sleep_start();
+            //delay(1000 * sleepTime);                                                                 
             ESP.restart();                                  
         }
     }

@@ -12,7 +12,7 @@ public:
     SensorOutput led = SensorOutput(this, "LED", 14, 0);
     SensorVariable v = SensorVariable(this, "RETRY", "X10");
 //} ambientTempSensor1("EC64C9986F2C");
-} ambientTempSensor1("auto");
+} ambientTempSensor1("auto"), at2("auto"), at3("auto");
       
 // also maybe config by SCHEMA like
 RemoteSensorArray ambientTempSensor2("FFAACCEE01", "RESULT=DHT11 BAT=ADC13*.00023 TEMP=DHT11 LED=OUTPUT13,0 MILLIS=MILLIS");
@@ -23,13 +23,13 @@ float volts1 = ambientTempSensor2.read("BAT");
 float volts2 = ambientTempBattery.read();
 float volts3 = ambientTempSensor1.tempC.asFloat();
 
-RemoteSensorServer server(6, { &ambientTempSensor1, &ambientTempSensor2});
+RemoteSensorServer server(6, { &ambientTempSensor1, &at2, &at3 });
         
 RemoteSensorClient client1;
 
 void setup() {
     //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout 
-    if (getMacAddress() == "EC64C9986F2C") { 
+    if (getMacAddress() != "D48AFCA4AF20") { 
         j.mqtt.active = j.jw.enabled = false;
     }
     j.begin();    
@@ -38,14 +38,14 @@ void setup() {
 
 void loop() {
     j.run();
-    if (getMacAddress() == "EC64C9986F2C") { 
-        client1.run();
-    } else { 
+    if (getMacAddress() == "D48AFCA4AF20") { 
         server.run();
         ambientTempSensor1.v.result = sfmt("X%dY", millis() / 1000);
         if (ambientTempSensor1.updated()) {
             OUT("results: %f %f", ambientTempSensor1.tempC.asFloat(), ambientTempSensor1.battery.asFloat());
         }
+    } else { 
+        client1.run();
     }
     delay(1);
 }
