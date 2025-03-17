@@ -10,6 +10,38 @@ using std::vector;
 
 class RemoteSensorModule;
 
+class RemoteSensorProtocol {
+protected: 
+    struct {
+        const string ACK = "ACK";
+        const string MAC = "MAC";
+        const string SERVER = "SERVER";
+        const string SCHASH = "SCHASH";
+        const string UPDATENOW = "UPDATENOW";
+        const string SLEEP = "SLEEP";
+    } specialWords;
+    //TODO
+    class LineMap : public std::map<string,string> {
+    public:
+        bool contains(const string &s) { 
+            return find(s) != end();
+        }
+    };
+    LineMap parseLine(const string &s) {
+        LineMap rval;
+        for(auto w : split(s, ' ')) { 
+            if (s.find("=") != string::npos) {
+                string name = w.substr(0, w.find("="));
+                string val = w.substr(w.find("=") + 1);
+                rval[name] = val;
+            } else { 
+                rval[s] = "";
+            }
+        }
+        return rval;
+    }
+};
+
 class Sensor { 
 friend RemoteSensorModule;
 protected:
@@ -27,7 +59,7 @@ public:
 
 };
 
-class SchemaParser { 
+class SchemaParser : protected RemoteSensorProtocol { 
 public:
     typedef Sensor *(*ParserFunc)(const string &);
     static vector<ParserFunc> parserList;
@@ -57,10 +89,10 @@ public:
 
 };
 vector<SchemaParser::ParserFunc> SchemaParser::parserList;
-    
-class RemoteSensorServer;
 
-class RemoteSensorModule {
+class RemoteSensorServer;
+    
+class RemoteSensorModule : public RemoteSensorProtocol {
     vector<Sensor *> sensors;
     vector<const char*> requiredFields = {"SCHASH=SCHASH", "MAC=MAC"};
     string mac, schema;
@@ -99,6 +131,7 @@ public:
         }
         return NULL;
     }
+    Sensor *findByName(const string &s) { return findByName(s.c_str()); }
     string makeAllSchema() { 
         string r;
         for(auto i : sensors) { 
@@ -109,8 +142,8 @@ public:
 
     string makeAllResults() { 
         string r;
-        findByName("MAC")->result = this->mac;
-        findByName("SCHASH")->result = makeHash();
+        findByName(specialWords.MAC)->result = this->mac;
+        findByName(specialWords.SCHASH)->result = makeHash();
         for(auto i : sensors) { 
             i->result = i->makeReport();
             r += i->name + "=" + i->result + " ";
@@ -122,19 +155,18 @@ public:
         string hash = makeAllSchema(); 
         return sfmt("%08x", hash.length());
     }
-    void parseAllResults(const string &s) {
-        for (auto w : split(s, ' ')) { 
-            string name = w.substr(0, w.find("="));
-            string v = w.substr(w.find("=") + 1); 
-            for(auto i : sensors) { 
-                if (name == i->name && i->isOutput == false) { 
-                    i->result = v;
+
+    void parseAllResults(const string &line) {
+        LineMap tokens = parseLine(line);
+        for(auto t : tokens) { 
+            for(auto s : sensors) { 
+                if (s->name == t.first && s->isOutput == false) { 
+                    s->result = t.second;
+                    updateReady = true;
                     break;
                 }
             }
         }
-        if (s != "")
-            updateReady = true;
     }
 
     void parseAllSetValues(const string &s) {
@@ -143,7 +175,7 @@ public:
             string name = w.substr(0, w.find("="));
             string v = w.substr(w.find("=") + 1); 
             for(auto i : sensors) { 
-                if (name == i->name) { 
+                if (name == i->name && i->isOutput) { 
                     i->setValue(v);
                     break;
                 }
@@ -290,15 +322,17 @@ class SensorOutput : public Sensor {
 public:
     SensorOutput(RemoteSensorModule *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {
         isOutput = true;
-        result = sfmt("%d", mode);
+        setValue(sfmt("%d", mode));
     }    
-    void begin() { pinMode(pin, OUTPUT); digitalWrite(pin, mode); }
+    //void begin() { pinMode(pin, OUTPUT); digitalWrite(pin, mode); }
     string makeSchema() { return sfmt("OUTPUT%d,%d", pin, mode); }
     string makeReport() { return sfmt("%d", digitalRead(pin)); }
     void setValue(const string &s) { 
         sscanf(s.c_str(), "%d", &mode);
-        OUT("setting pin %d to %d", pin, mode);
+        OUT("SensorOutput pin %d => %d", pin, mode);
+        pinMode(pin, OUTPUT);
         digitalWrite(pin, mode);
+        result = s;
     }
     static SchemaParser::RegisterClass reg;
 };
@@ -316,14 +350,14 @@ public:
     string value;
     SensorVariable(RemoteSensorModule *p, const char *n, const char *v) : Sensor(p, n), defaultValue(v) {
         isOutput = true;
-        result = defaultValue;
-        value = defaultValue;
+        value = result = defaultValue;
+        setValue(value);
     }    
     string makeSchema() { return sfmt("VAR,%s", defaultValue.c_str()); }
     string makeReport() { return value; }
     void setValue(const string &s) { 
         value = s;
-        OUT("setting variable %s to %s", name.c_str(), value.c_str());
+        //OUT("setting variable %s to %s", name.c_str(), value.c_str());
     }
     static SchemaParser::RegisterClass reg;
 };
@@ -335,27 +369,6 @@ SchemaParser::RegisterClass SensorVariable::reg([](const string &s)->Sensor * {
     return NULL; 
 });
 
-class RemoteSensorProtocol {
-protected: 
-    struct {
-        const string ACK = "ACK";
-        const string MAC = "MAC";
-        const string SERVER = "SERVER";
-        const string SCHASH = "SCHASH";
-        const string UPDATENOW = "UPDATENOW";
-        const string SLEEP = "SLEEP";
-    } specialWords;
-    //TODO
-    map<string,string> parseLine(const string &s) {
-        map<string,string> rval;
-        for(auto w : split(s, ' ')) { 
-            string name = w.substr(0, w.find("="));
-            string val = w.substr(w.find("=") + 1);
-            rval[name] = val;
-        }
-        return rval;
-    }
-};
 
 class RemoteSensorServer : public RemoteSensorProtocol { 
     ReliableStreamESPNow fakeEspNow = ReliableStreamESPNow("SN", true);
@@ -377,7 +390,7 @@ public:
         if (s.find(specialWords.ACK) == 0) 
             return;
         string incomingMac = "", incomingHash = "";
-        map<string, string> in = parseLine(s);
+        std::map<string, string> in = parseLine(s);
         incomingMac = in[specialWords.MAC];
         incomingHash = in[specialWords.SCHASH];
         if (in.find(specialWords.SERVER) != in.end()) return;
@@ -388,6 +401,13 @@ public:
             if (p->mac == incomingMac) {
                 packetHandled = true;
                 string hash = p->makeHash();
+
+                if (in[specialWords.SCHASH] != hash) { 
+                    string out = "SERVER=1 MAC=" + p->mac + " NEWSCHEMA=1 " + p->makeAllSchema();
+                    write(out);
+                    return;
+                }
+
                 for(auto w : split(s, ' ')) { 
                     string name = w.substr(0, w.find("="));
                     string val = w.substr(w.find("=") + 1);
@@ -497,10 +517,10 @@ public:
     bool updateFirmwareNow = false, updateSchemaNow = false;
     uint32_t lastReceive = 0;
     void onReceive(const string &s) { 
-        if (s.find("ACK") == 0) 
-            return;
-        if (s.find("SERVER=1") == string::npos) 
-            return;
+        LineMap in = parseLine(s);
+        if (in.contains(specialWords.ACK)) return;
+        if (in.contains(specialWords.SERVER) == false) return;
+        
         string schash, newSchema;
         bool updatingSchema = false;   
         int sleepTime = -1;     
@@ -518,7 +538,6 @@ public:
                 else if (name == "NEWSCHEMA") updatingSchema = true;
                 else if (name == "UPDATENOW") updateFirmware();
                 else if (name == "SLEEP") sscanf(val.c_str(), "%d", &sleepTime);
-                // TODO: process setValues
             }
         }
         OUT("%09.4f client <<<< %s", millis() / 1000.0, s.c_str());
@@ -535,7 +554,7 @@ public:
         // TODO:  Write schema and shit to SPIFF
         if (sleepTime > 0) { 
             if (deepSleep) { 
-                OUT("%08.4f: Sleeping %d seconds...", millis() / 1000.0, sleepTime);
+                OUT("%09.4f: Sleeping %d seconds...", millis() / 1000.0, sleepTime);
                 WiFi.disconnect(true);  // Disconnect from the network
                 WiFi.mode(WIFI_OFF);    // Switch WiFi off
                 int rc = esp_sleep_enable_timer_wakeup(1000000LL * sleepTime);

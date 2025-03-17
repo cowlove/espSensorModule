@@ -9,12 +9,14 @@ public:
     RemoteSensorModuleDHT(const char *mac) : RemoteSensorModule(mac) {}
     SensorDHT tempC = SensorDHT(this, "TEMP", 11);
     SensorADC battery = SensorADC(this, "BATT", 33, .5023);
-    SensorOutput led = SensorOutput(this, "STATUSLIGHT", 22, 1);
+    SensorOutput led = SensorOutput(this, "LIGHTX", 22, 0);
     SensorVariable v = SensorVariable(this, "RETRY", "X10");
     SensorMillis m = SensorMillis(this);
     ////} ambientTempSensor1("EC64C9986F2C");
 } ambientTempSensor1("auto"), at2("auto"), at3("auto");
-      
+
+// TODO - these server-side instances also call SensorOutput::setValue and write pins, etc
+
 // also maybe config by SCHEMA like
 //RemoteSensorModule ambientTempSensor2("FFAACCEE01", "RESULT=DHT11 BAT=ADC13*.00023 TEMP=DHT11 LED=OUTPUT22,1 MILLIS=MILLIS");
 //SensorWrapper ambientTemp(&ambientTempSensor2, "RESULT");
@@ -35,7 +37,16 @@ void setup() {
     }
     j.begin();    
     j.run();
-
+#if 0 
+    for (int i = 0; i < 2; i++) { 
+        OUT("toggle");
+        pinMode(22, OUTPUT);
+        digitalWrite(22, 0);
+        delay(1000);
+        digitalWrite(22, 1);
+        delay(1000);
+    }
+#endif
 #ifdef CSIM
     client1.csimOverrideMac("MAC1");
     client2.csimOverrideMac("MAC2");
@@ -46,7 +57,6 @@ void setup() {
 
 void loop() {
     j.run();
-
 #ifdef CSIM
     client1.run();
     client2.run();
