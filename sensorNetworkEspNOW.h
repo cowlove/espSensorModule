@@ -8,14 +8,14 @@
 using std::string;
 using std::vector;
 
-class RemoteSensorArray;
+class RemoteSensorModule;
 
 class Sensor { 
-friend RemoteSensorArray;
+friend RemoteSensorModule;
 protected:
     bool isOutput = false;
 public:    
-    Sensor(RemoteSensorArray *parent = NULL, std::string n = "");
+    Sensor(RemoteSensorModule *parent = NULL, std::string n = "");
     virtual void begin() {}
     virtual string makeSchema() = 0;
     virtual string makeReport() = 0;
@@ -60,14 +60,15 @@ vector<SchemaParser::ParserFunc> SchemaParser::parserList;
     
 class RemoteSensorServer;
 
-class RemoteSensorArray {
+class RemoteSensorModule {
     vector<Sensor *> sensors;
     vector<const char*> requiredFields = {"SCHASH=SCHASH", "MAC=MAC"};
     string mac, schema;
 protected:
     friend RemoteSensorServer;
+    bool seen = false;
 public:
-    RemoteSensorArray(const char *_mac, const char *_schema = "") : mac(_mac), schema(_schema) {
+    RemoteSensorModule(const char *_mac, const char *_schema = "") : mac(_mac), schema(_schema) {
         for(auto p : requiredFields) { 
             if (strstr(schema.c_str(), p) == NULL)
                 schema = string(p) + " " + schema;
@@ -75,7 +76,7 @@ public:
         sensors = SchemaParser::parseSchema(schema);
     }
     //RemoteSensorArray(vector<Sensor> &v) { for(auto p : v) { sensors.push_back(&p);}}
-    RemoteSensorArray(vector<Sensor *> &v) { for(auto p : v) { sensors.push_back(p); }}
+    RemoteSensorModule(vector<Sensor *> &v) { for(auto p : v) { sensors.push_back(p); }}
     void addSensor(Sensor *p) { sensors.push_back(p); } 
     float read(const char *key = "RESULT") { return 0; }
     float read(const string &k) { return this->read(k.c_str()); }
@@ -169,21 +170,21 @@ public:
 
 class SensorWrapper {
 private:
-    RemoteSensorArray *parent;
+    RemoteSensorModule *parent;
     string key;
 public: 
-    SensorWrapper(RemoteSensorArray *_parent, const string &_key) : parent(_parent), key(_key) {}  
+    SensorWrapper(RemoteSensorModule *_parent, const string &_key) : parent(_parent), key(_key) {}  
     float read() { return parent->read(key); }  
 };
 
-Sensor::Sensor(RemoteSensorArray *parent /*= NULL*/, std::string n /*= ""*/) : name(n) { 
+Sensor::Sensor(RemoteSensorModule *parent /*= NULL*/, std::string n /*= ""*/) : name(n) { 
     if (parent) parent->addSensor(this);
 }
 
     
 class SensorSchemaHash : public Sensor { 
 public:
-    SensorSchemaHash(RemoteSensorArray *p = NULL) : Sensor(p, "SCHASH") { result = "NO_HASH"; }
+    SensorSchemaHash(RemoteSensorModule *p = NULL) : Sensor(p, "SCHASH") { result = "NO_HASH"; }
     void begin() {}
     string makeSchema() { return "SCHASH"; }
     string makeReport() { return result; }
@@ -195,7 +196,7 @@ SchemaParser::RegisterClass SensorSchemaHash::reg([](const string &s)->Sensor * 
 
 class SensorMillis : public Sensor { 
     public:
-        SensorMillis(RemoteSensorArray *p) : Sensor(p, "MILLIS") {}
+        SensorMillis(RemoteSensorModule *p) : Sensor(p, "MILLIS") {}
         void begin() {}
         string makeSchema() { return "MILLIS"; }
         string makeReport() { return sfmt("%d", millis()); }
@@ -207,7 +208,7 @@ SchemaParser::RegisterClass SensorMillis::reg([](const string &s)->Sensor * {
     
 class SensorMAC : public Sensor { 
 public:
-    SensorMAC(RemoteSensorArray *p) : Sensor(p, "MAC") { result = "NO_MAC"; }
+    SensorMAC(RemoteSensorModule *p) : Sensor(p, "MAC") { result = "NO_MAC"; }
     string makeSchema() { return "MAC"; }
     string makeReport() { return result; }
     static SchemaParser::RegisterClass reg;
@@ -218,7 +219,7 @@ SchemaParser::RegisterClass SensorMAC::reg([](const string &s)->Sensor * {
     
 class SensorGit : public Sensor { 
 public:
-    SensorGit(RemoteSensorArray *p) : Sensor(p, "GIT") {}
+    SensorGit(RemoteSensorModule *p) : Sensor(p, "GIT") {}
     string makeSchema() { return "GIT"; }
     string makeReport() { return string(GIT_VERSION); }
     static SchemaParser::RegisterClass reg;
@@ -231,7 +232,7 @@ class SensorADC : public Sensor {
     int pin;
     float scale;
 public:
-    SensorADC(RemoteSensorArray *p, const char *n, int _pin, float s = 1.0) : Sensor(p, n), pin(_pin), scale(s) {}    
+    SensorADC(RemoteSensorModule *p, const char *n, int _pin, float s = 1.0) : Sensor(p, n), pin(_pin), scale(s) {}    
     string makeSchema() { return sfmt("ADC%d*%f", pin, scale); }
     string makeReport() { return sfmt("%f", avgAnalogRead(pin, 1024) * scale + (millis() % 971) / 1000.0); }
     static SchemaParser::RegisterClass reg;
@@ -246,7 +247,7 @@ SchemaParser::RegisterClass SensorADC::reg([](const string &s)->Sensor * {
 class SensorDHT : public Sensor { 
     int pin;
 public:
-    SensorDHT(RemoteSensorArray *p, const char *n, int _pin) : Sensor(p, n), pin(_pin) {}    
+    SensorDHT(RemoteSensorModule *p, const char *n, int _pin) : Sensor(p, n), pin(_pin) {}    
     void begin() {}
     string makeSchema() { return sfmt("DHT%d", pin); }
     string makeReport() { return sfmt("%f", 12.34 + (millis() % 573) / 1000.0); }
@@ -263,7 +264,7 @@ SchemaParser::RegisterClass SensorDHT::reg([](const string &s)->Sensor * {
 class SensorInput : public Sensor { 
     int pin, mode;
 public:
-    SensorInput(RemoteSensorArray *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {}    
+    SensorInput(RemoteSensorModule *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {}    
     void begin() { pinMode(pin, mode); }
     string makeSchema() {
         const char *m = "";
@@ -287,7 +288,7 @@ SchemaParser::RegisterClass SensorInput::reg([](const string &s)->Sensor * {
 class SensorOutput : public Sensor { 
     int pin, mode;
 public:
-    SensorOutput(RemoteSensorArray *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {
+    SensorOutput(RemoteSensorModule *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {
         isOutput = true;
         result = sfmt("%d", mode);
     }    
@@ -313,7 +314,7 @@ class SensorVariable : public Sensor {
     string defaultValue;
 public:
     string value;
-    SensorVariable(RemoteSensorArray *p, const char *n, const char *v) : Sensor(p, n), defaultValue(v) {
+    SensorVariable(RemoteSensorModule *p, const char *n, const char *v) : Sensor(p, n), defaultValue(v) {
         isOutput = true;
         result = defaultValue;
         value = defaultValue;
@@ -334,32 +335,54 @@ SchemaParser::RegisterClass SensorVariable::reg([](const string &s)->Sensor * {
     return NULL; 
 });
 
-ReliableStreamESPNow fakeEspNow("SN", true);
-
-
-class FakeEspNowFifo { 
-public:
-    string data;
-    void write(const string &s) { data = s; }
-    string read() { string rval = data; data = ""; return rval; }
-
-} fakeEspNowNO;
-
-class RemoteSensorServer { 
-    vector<RemoteSensorArray *> modules;
-public: 
-    RemoteSensorServer(int espNowChannel) {}
-    RemoteSensorServer(int espNowChannel, vector<RemoteSensorArray *> m) : modules(m) {}    
-    void onReceive(const string &s) {
-        OUT("%09.4f server <<<< %s", millis() / 1000.0, s.c_str());
-        string incomingMac = "", incomingHash = "";
+class RemoteSensorProtocol {
+protected: 
+    struct {
+        const string ACK = "ACK";
+        const string MAC = "MAC";
+        const string SERVER = "SERVER";
+        const string SCHASH = "SCHASH";
+        const string UPDATENOW = "UPDATENOW";
+        const string SLEEP = "SLEEP";
+    } specialWords;
+    //TODO
+    map<string,string> parseLine(const string &s) {
+        map<string,string> rval;
         for(auto w : split(s, ' ')) { 
             string name = w.substr(0, w.find("="));
             string val = w.substr(w.find("=") + 1);
-            //OUT("%s == %s", name.c_str(), val.c_str());
-            if (name == "MAC") { incomingMac = val; }
-            if (name == "SCHASH") { incomingHash = val; }
-        } 
+            rval[name] = val;
+        }
+        return rval;
+    }
+};
+
+class RemoteSensorServer : public RemoteSensorProtocol { 
+    ReliableStreamESPNow fakeEspNow = ReliableStreamESPNow("SN", true);
+    vector<RemoteSensorModule *> modules;
+    int countSeen() { 
+        int rval = 0;
+        for(auto p : modules) { 
+            if (p->seen) rval++;
+        }
+        return rval;
+    }
+    uint32_t lastReportMs = 0, nextSleepTimeMs = 0; // todo avoid rollover by tracking start of sleep period, not end of sleep period
+    int serverSleepSeconds = 120;
+    int serverSleepLinger = 60;
+public: 
+    RemoteSensorServer(int espNowChannel) {}
+    RemoteSensorServer(int espNowChannel, vector<RemoteSensorModule *> m) : modules(m) {}    
+    void onReceive(const string &s) {
+        if (s.find(specialWords.ACK) == 0) 
+            return;
+        string incomingMac = "", incomingHash = "";
+        map<string, string> in = parseLine(s);
+        incomingMac = in[specialWords.MAC];
+        incomingHash = in[specialWords.SCHASH];
+        if (in.find(specialWords.SERVER) != in.end()) return;
+        OUT("%09.4f server <<<< %s", millis() / 1000.0, s.c_str());
+
         bool packetHandled = false;
         for(auto p : modules) { 
             if (p->mac == incomingMac) {
@@ -370,19 +393,29 @@ public:
                     string val = w.substr(w.find("=") + 1);
                     if (name == "SCHASH") {
                         if (hash != val) { 
-                            string out = "MAC=" + p->mac + " NEWSCHEMA=1 " + p->makeAllSchema();
+                            string out = "SERVER=1 MAC=" + p->mac + " NEWSCHEMA=1 " + p->makeAllSchema();
                             write(out);
                             return;
                         }
                     } else if (0) { 
-                        string out = "MAC=" + p->mac + " UPDATENOW=1 ...";
+                        string out = "SERVER=1 MAC=" + p->mac + " UPDATENOW=1 ...";
                         write(out);
-                    } else { 
+                    } else if (name == "ENDLINE") {
+                        break; 
                     }
                 }
-                if (hash == incomingHash) { 
+                if (hash == incomingHash) {
+                    if (countSeen() == 0) {
+                        nextSleepTimeMs = millis() + serverSleepSeconds * 1000;
+                    } 
+                    p->seen = true;
+                    lastReportMs = millis();
                     p->parseAllResults(s);
-                    string out = "MAC=" + p->mac + " SCHASH=" + hash + " SLEEP=60 " + p->makeAllSetValues();
+                    int moduleSleepSec = (nextSleepTimeMs - millis()) / 1000;
+                    if (moduleSleepSec > serverSleepSeconds)
+                        moduleSleepSec = 5;
+                    string out = "SERVER=1 MAC=" + p->mac + " SCHASH=" + hash + " SLEEP=" 
+                        + sfmt("%d ", moduleSleepSec) + p->makeAllSetValues();
                     write(out);
                 } else {
                     OUT("%s != %s", incomingHash.c_str(), hash.c_str());
@@ -414,16 +447,41 @@ public:
         string in = fakeEspNow.read();
         if (in != "") 
             onReceive(in);
-        // TODO: have we heard from all sensors?  we can sleep; 
+        if (j.secTick(5)) { 
+            OUT("Seen %d/%d modules, last traffic %d sec ago", countSeen(), modules.size(), (millis() - lastReportMs) / 1000);
+        }
+        if (countSeen() > 0 && (nextSleepTimeMs - millis()) / 1000 > serverSleepSeconds) {
+            // missing some sensors but the entire sleep period has elapsed?  Just reset to next sleep Period 
+            nextSleepTimeMs = millis() + serverSleepSeconds * 1000;
+        }
+
+        if (countSeen() > 0 && countSeen() == modules.size() && (millis() - lastReportMs) > serverSleepLinger * 1000) {
+            int sleepSec = (nextSleepTimeMs - millis()) / 1000;
+            if (sleepSec > serverSleepSeconds)
+                sleepSec = 0;
+            for(auto p : modules) p->seen = false;
+            OUT("All %d modules accounted for, time to sleep %d sec", modules.size(), sleepSec);
+        }
     }
 };
 
-class RemoteSensorClient { 
-    RemoteSensorArray *array = NULL;
-    string myMac() { return getMacAddress().c_str(); }
+class RemoteSensorClient : public RemoteSensorProtocol { 
+    string mac = getMacAddress().c_str();
+    ReliableStreamESPNow fakeEspNow = ReliableStreamESPNow("SN", true);
+    RemoteSensorModule *array = NULL;
     static SPIFFSVariable<int> lastChannel;
     static SPIFFSVariable<string> lastSchema;
+    uint32_t inhibitStartMs, inhibitMs = 0;
+    bool deepSleep = true;
 public:
+    void csimOverrideMac(const string &s) { 
+        mac = s;
+        if (array != NULL) delete array;
+        array = NULL;
+        string sch = lastSchema;
+        init(sch);
+        deepSleep = false;
+    } 
     RemoteSensorClient() { 
         string s = lastSchema;
         espNowMux.defaultChannel = lastChannel; 
@@ -431,7 +489,7 @@ public:
     }
     void init(const string &schema) { 
         if (array != NULL) delete array;
-        array = new RemoteSensorArray(myMac().c_str(), schema.c_str());
+        array = new RemoteSensorModule(mac.c_str(), schema.c_str());
     }
     void updateFirmware() {
         // TODO
@@ -439,7 +497,10 @@ public:
     bool updateFirmwareNow = false, updateSchemaNow = false;
     uint32_t lastReceive = 0;
     void onReceive(const string &s) { 
-        OUT("%09.4f client <<<< %s", millis() / 1000.0, s.c_str());
+        if (s.find("ACK") == 0) 
+            return;
+        if (s.find("SERVER=1") == string::npos) 
+            return;
         string schash, newSchema;
         bool updatingSchema = false;   
         int sleepTime = -1;     
@@ -450,7 +511,7 @@ public:
                 string name = w.substr(0, w.find("="));
                 string val = w.substr(w.find("=") + 1);
                 if (name == "MAC") {
-                    if (val != myMac()) return;
+                    if (val != mac) return;
                     lastChannel = espNowMux.defaultChannel;
                     lastReceive = millis();
                 }
@@ -460,6 +521,7 @@ public:
                 // TODO: process setValues
             }
         }
+        OUT("%09.4f client <<<< %s", millis() / 1000.0, s.c_str());
         if (updatingSchema) { 
             OUT("Got new schema: %s", newSchema.c_str());
             init(newSchema);
@@ -472,15 +534,20 @@ public:
             array->parseAllSetValues(s);
         // TODO:  Write schema and shit to SPIFF
         if (sleepTime > 0) { 
-            OUT("%08.4f: Sleeping %d seconds...", millis() / 1000.0, sleepTime);
-            WiFi.disconnect(true);  // Disconnect from the network
-            WiFi.mode(WIFI_OFF);    // Switch WiFi off
-            int rc = esp_sleep_enable_timer_wakeup(1000000LL * sleepTime);
-            Serial.flush();
-            //esp_light_sleep_start();                                                                 
-            esp_deep_sleep_start();
-            //delay(1000 * sleepTime);                                                                 
-            ESP.restart();                                  
+            if (deepSleep) { 
+                OUT("%08.4f: Sleeping %d seconds...", millis() / 1000.0, sleepTime);
+                WiFi.disconnect(true);  // Disconnect from the network
+                WiFi.mode(WIFI_OFF);    // Switch WiFi off
+                int rc = esp_sleep_enable_timer_wakeup(1000000LL * sleepTime);
+                Serial.flush();
+                //esp_light_sleep_start();                                                                 
+                esp_deep_sleep_start();
+                //delay(1000 * sleepTime);                                                                 
+                ESP.restart();                                 
+            } else { 
+                inhibitStartMs = millis();
+                inhibitMs = sleepTime * 1000;
+            } 
         }
     }
     void write(const string &s) { 
@@ -490,18 +557,26 @@ public:
     void run() {
         string in = fakeEspNow.read();
         if (in != "") 
-            onReceive(in); 
-        if (array != NULL && (j.once() || j.secTick(1))) { 
-            string out = array->makeAllResults();
-            write(out);
+            onReceive(in);
+            
+        if (inhibitMs > 0) { 
+            if (millis() - inhibitStartMs > inhibitMs) { 
+                inhibitMs = 0;
+                lastReceive = millis();
+            }
+        } else { 
+            if (array != NULL && (j.once() || j.secTick(1))) { 
+                string out = array->makeAllResults() + "ENDLINE=1 ";
+                write(out);
+            }
+            // channel hopping
+            if (millis() - lastReceive > 5000) {
+                espNowMux.defaultChannel = (espNowMux.defaultChannel + 1) % 14;
+                espNowMux.stop();
+                espNowMux.firstInit = true;
+                lastReceive = millis();
+            }
         }
-        if (millis() - lastReceive > 5000) {
-            espNowMux.defaultChannel = (espNowMux.defaultChannel + 1) % 14;
-            espNowMux.stop();
-            espNowMux.firstInit = true;
-            lastReceive = millis();
-        }
-
     }
 };
 
