@@ -2,6 +2,7 @@
 #define __SENSORNETWORKESPNOW_H_
 #include "espNowMux.h"
 #include "reliableStream.h"
+#include "Arduino_CRC32.h" 
 
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@ class RemoteSensorModule;
 
 class RemoteSensorProtocol {
 protected: 
+    Arduino_CRC32 crc32;
     struct {
         const string ACK = "ACK";
         const string MAC = "MAC";
@@ -83,10 +85,6 @@ public:
     struct RegisterClass { 
         RegisterClass(ParserFunc a) { parserList.push_back(a); }
     };
-    string hashSchema(const string &schema) { 
-        return "hashSchema()HASH";
-    }
-
 };
 vector<SchemaParser::ParserFunc> SchemaParser::parserList;
 
@@ -152,8 +150,15 @@ public:
     }
 
     string makeHash() {
-        string hash = makeAllSchema(); 
-        return sfmt("%08x", hash.length());
+        string sch = makeAllSchema(); 
+        string toHash = "";
+        auto words = split(sch, ' ');
+        for (auto w : words) { 
+            if (w.find(specialWords.SCHASH + "=") != 0)
+                toHash += w;
+        }
+        uint32_t hash = crc32.calc((uint8_t const *)toHash.c_str(), toHash.length());
+        return sfmt("%08x", hash);
     }
 
     void parseAllResults(const string &line) {
@@ -266,13 +271,13 @@ class SensorADC : public Sensor {
 public:
     SensorADC(RemoteSensorModule *p, const char *n, int _pin, float s = 1.0) : Sensor(p, n), pin(_pin), scale(s) {}    
     string makeSchema() { return sfmt("ADC%d*%f", pin, scale); }
-    string makeReport() { return sfmt("%f", avgAnalogRead(pin, 1024) * scale + (millis() % 971) / 1000.0); }
+    string makeReport() { return sfmt("%f", avgAnalogRead(pin, 1024) * scale); }
     static SchemaParser::RegisterClass reg;
 };
 SchemaParser::RegisterClass SensorADC::reg([](const string &s)->Sensor * { 
     float pin, scale;
     if (sscanf(s.c_str(), "ADC%f*%f", &pin, &scale) == 2) 
-        return new SensorADC(NULL, "", pin);
+        return new SensorADC(NULL, "", pin, scale);
     return NULL; 
 });
 
@@ -381,7 +386,7 @@ class RemoteSensorServer : public RemoteSensorProtocol {
         return rval;
     }
     uint32_t lastReportMs = 0, nextSleepTimeMs = 0; // todo avoid rollover by tracking start of sleep period, not end of sleep period
-    int serverSleepSeconds = 120;
+    int serverSleepSeconds = 300;
     int serverSleepLinger = 60;
 public: 
     RemoteSensorServer(int espNowChannel) {}

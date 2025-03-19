@@ -8,7 +8,7 @@ class RemoteSensorModuleDHT : public RemoteSensorModule {
 public:
     RemoteSensorModuleDHT(const char *mac) : RemoteSensorModule(mac) {}
     SensorDHT tempC = SensorDHT(this, "TEMP", 11);
-    SensorADC battery = SensorADC(this, "BATT", 33, .5023);
+    SensorADC battery = SensorADC(this, "LIPOBATTERY2", 33, .0017);
     SensorOutput led = SensorOutput(this, "LIGHTX", 22, 0);
     SensorVariable v = SensorVariable(this, "RETRY", "X10");
     SensorMillis m = SensorMillis(this);
