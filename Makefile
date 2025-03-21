@@ -21,12 +21,12 @@ include ${HOME}/Arduino/libraries/makeEspArduino/makeEspArduino.mk
 csim: ${MAIN_NAME}_csim
 	cp $< $@
 
-CSIM_INC=${HOME}/Arduino/libraries/Arduino_CRC32/src/
-CSIM_CPP=${HOME}/Arduino/libraries/Arduino_CRC32/src/*
+CSIM_INC=-I${HOME}/Arduino/libraries/Arduino_CRC32/src/ -I${HOME}/Arduino/libraries/esp32jimlib/src/
+CSIM_CPP=${HOME}/Arduino/libraries/Arduino_CRC32/src/* ${HOME}/Arduino/libraries/esp32jimlib/src/*.cpp
 
 ${MAIN_NAME}_csim:  
 	g++ -x c++ -fpermissive -g ${MAIN_NAME}.ino -o $@ -DGIT_VERSION=\"${GIT_VERSION}\" -DESP32 -DCSIM -DUBUNTU \
-	-I./ -I${HOME}/Arduino/lib -I ${HOME}/Arduino/libraries/esp32jimlib/src/ -I ${CSIM_INC} \
+	-I./  ${CSIM_INC} \
 	${CSIM_CPP}
 	
 
