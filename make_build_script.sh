@@ -25,9 +25,9 @@ echo "cat ${SKETCH}.ino >> ${SKETCHDIR}/sketch/${SKETCH}.ino.cpp" >> $OUT
 egrep "${SKETCH}.ino.cpp.o" $TMP >> $OUT
 egrep '^python3' $TMP >> $OUT
 grep esptool_py $TMP | grep -v ${PORT} >> $OUT
-echo "echo Waiting for ${PORT}...; while [ ! -e ${PORT} ]; do sleep 1; done" >> $OUT
+#echo "echo Waiting for ${PORT}...; while [ ! -e ${PORT} ]; do sleep 1; done" >> $OUT
 grep esptool_py $TMP | grep ${PORT} >> $OUT
-echo "echo Waiting for ${PORT}...; while [ ! -e ${PORT} ]; do sleep 1; done" >> $OUT
+#echo "echo Waiting for ${PORT}...; while [ ! -e ${PORT} ]; do sleep 1; done" >> $OUT
 echo "stty -F ${PORT} raw -echo && cat ${PORT}" >> $OUT
 
 #if [ ! -d build ]; then mkdir build; fi

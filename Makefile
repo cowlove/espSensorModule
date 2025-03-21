@@ -22,7 +22,7 @@ csim: ${MAIN_NAME}_csim
 	cp $< $@
 
 CSIM_INC=-I${HOME}/Arduino/libraries/Arduino_CRC32/src/ -I${HOME}/Arduino/libraries/esp32jimlib/src/
-CSIM_CPP=${HOME}/Arduino/libraries/Arduino_CRC32/src/* ${HOME}/Arduino/libraries/esp32jimlib/src/*.cpp
+CSIM_CPP=${HOME}/Arduino/libraries/Arduino_CRC32/src/* 
 
 ${MAIN_NAME}_csim:  
 	g++ -x c++ -fpermissive -g ${MAIN_NAME}.ino -o $@ -DGIT_VERSION=\"${GIT_VERSION}\" -DESP32 -DCSIM -DUBUNTU \
