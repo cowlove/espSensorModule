@@ -8,8 +8,8 @@ class RemoteSensorModuleDHT : public RemoteSensorModule {
 public:
     RemoteSensorModuleDHT(const char *mac) : RemoteSensorModule(mac) {}
     SensorDHT tempC = SensorDHT(this, "TEMP", 11);
-    SensorADC battery = SensorADC(this, "LIPOBATTERY2", 33, .0017);
-    SensorOutput led = SensorOutput(this, "LIGHTX", 22, 0);
+   // SensorADC battery = SensorADC(this, "LIPOBATTERY2", 33, .0017);
+   // SensorOutput led = SensorOutput(this, "LIGHTX", 22, 0);
     SensorVariable v = SensorVariable(this, "RETRY", "X10");
     SensorMillis m = SensorMillis(this);
     ////} ambientTempSensor1("EC64C9986F2C");
@@ -30,11 +30,16 @@ RemoteSensorServer server(6, { &ambientTempSensor1, &at2, &at3 });
         
 RemoteSensorClient client1, client2, client3;
 
+
+bool isServer() { 
+    return getMacAddress() == "D48AFCA4AF20" || getMacAddress() == "083AF2B59110";
+}
 void setup() {
     //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout 
-    if (getMacAddress() != "D48AFCA4AF20") { 
+    if (isServer() == false) { 
         j.mqtt.active = j.jw.enabled = false;
     }
+    j.mqtt.active = false;
     j.begin();    
     j.run();
 #if 0 
@@ -64,7 +69,7 @@ void loop() {
     server.run();
 #endif
 
-if (getMacAddress() == "D48AFCA4AF20") { 
+    if (isServer()) { 
         server.run();
 //        ambientTempSensor1.v.result = sfmt("X%dY", millis() / 1000);
 //        if (ambientTempSensor1.updated()) {

@@ -515,6 +515,7 @@ public:
     void init(const string &schema) { 
         if (array != NULL) delete array;
         array = new RemoteSensorModule(mac.c_str(), schema.c_str());
+        lastReceive = millis();
     }
     void updateFirmware() {
         // TODO
@@ -589,12 +590,12 @@ public:
                 lastReceive = millis();
             }
         } else { 
-            if (array != NULL && (j.once() || j.secTick(1))) { 
+            if (array != NULL && (j.once() || j.secTick(.5))) { 
                 string out = array->makeAllResults() + "ENDLINE=1 ";
                 write(out);
             }
             // channel hopping
-            if (millis() - lastReceive > 5000) {
+            if (millis() - lastReceive > 10000) {
                 espNowMux.defaultChannel = (espNowMux.defaultChannel + 1) % 14;
                 espNowMux.stop();
                 espNowMux.firstInit = true;
