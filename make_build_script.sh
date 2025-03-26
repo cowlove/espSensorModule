@@ -1,28 +1,32 @@
 #!/bin/bash
-BOARD=$1
-TMP=/tmp/arduino/$$.txt
-PORT=/dev/ttyUSB0
-BOARD_OPTS=PartitionScheme=min_spiffs
+PORT=/dev/ttyACM0
+BOARD=esp32c3
+BOARD_OPTS=PartitionScheme=huge_app,CDCOnBoot=cdc 
 
-if [ ! $BOARD == "esp32" ]; then
-    BOARD_OPTS="$BOARD_OPTS",CDCOnBoot=cdc
-    PORT=/dev/ttyACM0
-fi
 
-cd `dirname $0`
-arduino-cli compile  -v \
-    -b esp32:esp32:${BOARD} --board-options ${BOARD_OPTS} -u --port ${PORT} --build-cache-path core.a \
-	--build-property compiler.cpp.extra_flags=-DESP32CORE_V2    | tee $TMP
+cd "`dirname $0`"
+SKETCH="`basename \`pwd\``"
+BUILDDIR="/tmp/arduino/${SKETCH}/${BOARD}"
+TMP="${BUILDDIR}/$$.txt"
+mkdir -p "${BUILDDIR}"
+arduino-cli compile -e -v -b esp32:esp32:${BOARD} --build-path ${BUILDDIR} \
+  --board-options ${BOARD_OPTS} -u -p ${PORT}\
+	 | tee "$TMP"
 
-SKETCH=`basename \`pwd\``
-SKETCHDIR=/tmp/arduino/sketches/`rematch '/tmp/arduino/sketches/([A-Z0-9]+)/' $TMP | head -1`
+ls /tmp/arduino/sketches && BASEDIR=/tmp/arduino/sketches
+ls ${HOME}/.cache/arduino/sketches && BASEDIR=${HOME}/.cache/arduino/sketches
+
+#SKETCHDIR=/tmp/arduino/sketches/`rematch '/tmp/arduino/sketches/([A-Z0-9]+)/' $TMP | head -1`
+SKETCHDIR="$BUILDDIR"
 SKETCHCPP="${SKETCHDIR}/sketch/${SKETCH}.ino.cpp"
 OUT=./build-${BOARD}.sh
 
+# TODO: this is missing a link command        
 COMPILE_CMD=`egrep "[-]o ${SKETCHCPP}.o" $TMP`
-LINK_CMD1=`egrep "[-]o ${SKETCHDIR}/${SKETCH}.ino.elf" $TMP`
-LINK_CMD2=`grep esptool_py $TMP | grep -v ${PORT} | head -1 | tr '\n' ' '`
-LINK_CMD2=`grep esptool_py $TMP | grep -v ${PORT} | tail -1 | tr '\n' ' '`
+LINK_CMD1=`egrep " cr ${SKETCHDIR}/sketch/objs.a" $TMP`
+LINK_CMD2=`egrep "[-]o ${SKETCHDIR}/${SKETCH}.ino.elf" $TMP`
+LINK_CMD3=`grep esptool_py $TMP | grep -v ${PORT} | head -1 | tr '\n' ' '`
+LINK_CMD4=`grep esptool_py $TMP | grep -v ${PORT} | tail -1 | tr '\n' ' '`
 UPLOAD_CMD=`grep esptool_py $TMP | grep ${PORT} | tr '\n' ' '`
 
 cat <<END > $OUT
@@ -39,7 +43,10 @@ fi
 
 if [[ \$OPT == *l* ]]; then
 	echo Linking...
-	time ( set -e; $LINK_CMD1; $LINK_CMD2; $LINK_CMD3 ) 
+	$LINK_CMD1
+	$LINK_CMD2
+	$LINK_CMD3
+	$LINK_CMD4  
 fi
 
 if [[ \$OPT == *u* ]]; then
@@ -58,4 +65,4 @@ fi;
 END
 
 chmod 755 $OUT
-rm -f $TMP
+#rm -f $TMP

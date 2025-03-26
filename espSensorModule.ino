@@ -9,7 +9,7 @@ public:
     RemoteSensorModuleDHT(const char *mac) : RemoteSensorModule(mac) {}
     SensorDHT tempC = SensorDHT(this, "TEMP", 11);
    // SensorADC battery = SensorADC(this, "LIPOBATTERY2", 33, .0017);
-   // SensorOutput led = SensorOutput(this, "LIGHTX", 22, 0);
+    SensorOutput led = SensorOutput(this, "LIGHTX", 22, 0);
     SensorVariable v = SensorVariable(this, "RETRY", "X10");
     SensorMillis m = SensorMillis(this);
     ////} ambientTempSensor1("EC64C9986F2C");
@@ -26,7 +26,7 @@ public:
 //float volts2 = ambientTempBattery.read();
 //float volts3 = ambientTempSensor1.tempC.asFloat();
 
-RemoteSensorServer server(6, { &ambientTempSensor1, &at2, &at3 });
+RemoteSensorServer server({ &ambientTempSensor1, &at2, &at3 });
         
 RemoteSensorClient client1, client2, client3;
 SPIFFSVariable<vector<string>> logFile("/logFile", {}); 
@@ -44,20 +44,26 @@ void setup() {
     j.mqtt.active = false;
     j.begin();    
     j.run();
-#if 0 
-    for (int i = 0; i < 2; i++) { 
-        OUT("toggle");
-        pinMode(22, OUTPUT);
-        digitalWrite(22, 0);
-        delay(1000);
-        digitalWrite(22, 1);
-        delay(1000);
+
+#ifdef CSIM
+    if (csim_flags.OneProg) { 
+        client1.csimOverrideMac("MAC1");
+        client2.csimOverrideMac("MAC2");
+        client3.csimOverrideMac("MAC3");
     }
 #endif
 }
 
 void loop() {
     j.run();
+#ifdef CSIM
+    if (csim_flags.OneProg) { 
+        client1.run();
+        client2.run();
+        client3.run();
+        server.run();
+    }
+#endif
 
     if (isServer()) { 
         server.run();

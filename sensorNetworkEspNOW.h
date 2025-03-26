@@ -49,7 +49,7 @@ friend RemoteSensorModule;
 protected:
     bool isOutput = false;
 public:    
-    Sensor(RemoteSensorModule *parent = NULL, std::string n = "");
+    Sensor(RemoteSensorModule *p = NULL, std::string n = "");
     virtual void begin() {}
     virtual string makeSchema() = 0;
     virtual string makeReport() = 0;
@@ -58,7 +58,6 @@ public:
     string result = "";
     float asFloat() { return strtof(result.c_str(), NULL); }
     string asString() { return result; }
-
 };
 
 class SchemaParser : protected RemoteSensorProtocol { 
@@ -89,6 +88,7 @@ public:
 vector<SchemaParser::ParserFunc> SchemaParser::parserList;
 
 class RemoteSensorServer;
+class RemoteSensorClient;
     
 class RemoteSensorModule : public RemoteSensorProtocol {
     vector<Sensor *> sensors;
@@ -96,9 +96,12 @@ class RemoteSensorModule : public RemoteSensorProtocol {
     string mac, schema;
 protected:
     friend RemoteSensorServer;
+    friend RemoteSensorClient;
+    friend Sensor;
     bool seen = false;
 public:
-    RemoteSensorModule(const char *_mac, const char *_schema = "") : mac(_mac), schema(_schema) {
+    bool isClient;
+    RemoteSensorModule(const char *_mac, const char *_schema = "", bool _isClient = false) : mac(_mac), schema(_schema), isClient(_isClient) {
         for(auto p : requiredFields) { 
             if (strstr(schema.c_str(), p) == NULL)
                 schema = string(p) + " " + schema;
@@ -214,11 +217,10 @@ public:
     float read() { return parent->read(key); }  
 };
 
-Sensor::Sensor(RemoteSensorModule *parent /*= NULL*/, std::string n /*= ""*/) : name(n) { 
+Sensor::Sensor(RemoteSensorModule *parent /*= NULL*/, std::string n /*= ""*/) : name(n) {
     if (parent) parent->addSensor(this);
 }
 
-    
 class SensorSchemaHash : public Sensor { 
 public:
     SensorSchemaHash(RemoteSensorModule *p = NULL) : Sensor(p, "SCHASH") { result = "NO_HASH"; }
@@ -327,7 +329,8 @@ class SensorOutput : public Sensor {
 public:
     SensorOutput(RemoteSensorModule *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {
         isOutput = true;
-        setValue(sfmt("%d", mode));
+        if (p == NULL || p->isClient) // HACK TODO: p is set if called from server 
+            setValue(sfmt("%d", mode)); //called from server
     }    
     //void begin() { pinMode(pin, OUTPUT); digitalWrite(pin, mode); }
     string makeSchema() { return sfmt("OUTPUT%d,%d", pin, mode); }
@@ -353,7 +356,7 @@ class SensorVariable : public Sensor {
     string defaultValue;
 public:
     string value;
-    SensorVariable(RemoteSensorModule *p, const char *n, const char *v) : Sensor(p, n), defaultValue(v) {
+    SensorVariable(RemoteSensorModule *parent, const char *n, const char *v) : Sensor(parent, n), defaultValue(v) {
         isOutput = true;
         value = result = defaultValue;
         setValue(value);
@@ -389,8 +392,9 @@ class RemoteSensorServer : public RemoteSensorProtocol {
     int serverSleepSeconds = 300;
     int serverSleepLinger = 60;
 public: 
-    RemoteSensorServer(int espNowChannel) {}
-    RemoteSensorServer(int espNowChannel, vector<RemoteSensorModule *> m) : modules(m) {}    
+    RemoteSensorServer(vector<RemoteSensorModule *> m) : modules(m) {
+        for(RemoteSensorModule *p : modules) p->isClient = false;
+    }    
     void onReceive(const string &s) {
         if (s.find(specialWords.ACK) == 0) 
             return;
@@ -515,6 +519,7 @@ public:
     void init(const string &schema) { 
         if (array != NULL) delete array;
         array = new RemoteSensorModule(mac.c_str(), schema.c_str());
+        array->isClient = true;
         lastReceive = millis();
     }
     void updateFirmware() {
