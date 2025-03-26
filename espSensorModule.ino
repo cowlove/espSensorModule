@@ -7,9 +7,11 @@ CLI_VARIABLE_FLOAT(x, 800);
 class RemoteSensorModuleDHT : public RemoteSensorModule {
 public:
     RemoteSensorModuleDHT(const char *mac) : RemoteSensorModule(mac) {}
-    SensorDHT tempC = SensorDHT(this, "TEMP", 11);
-   // SensorADC battery = SensorADC(this, "LIPOBATTERY2", 33, .0017);
-    SensorOutput led = SensorOutput(this, "LIGHTX", 22, 0);
+    SensorOutput gnd = SensorOutput(this, "GND", 27, 0);
+    SensorDHT tempC = SensorDHT(this, "TEMP", 26);
+    SensorOutput vcc = SensorOutput(this, "VCC", 25, 1);
+    SensorADC battery = SensorADC(this, "LIPOBATTERY", 33, .0017);
+    SensorOutput led = SensorOutput(this, "LED", 22, 0);
     SensorVariable v = SensorVariable(this, "RETRY", "X10");
     SensorMillis m = SensorMillis(this);
     ////} ambientTempSensor1("EC64C9986F2C");
@@ -31,7 +33,6 @@ RemoteSensorServer server({ &ambientTempSensor1, &at2, &at3 });
 RemoteSensorClient client1, client2, client3;
 SPIFFSVariable<vector<string>> logFile("/logFile", {}); 
 
-
 bool isServer() { 
     return getMacAddress() == "D48AFCA4AF20" || getMacAddress() == "083AF2B59110" 
         || getMacAddress() == "E4B063417040";
@@ -39,9 +40,8 @@ bool isServer() {
 void setup() {
     //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout 
     if (isServer() == false) { 
-        j.mqtt.active = j.jw.enabled = false;
+        j.jw.enabled = false;
     }
-    j.mqtt.active = false;
     j.begin();    
     j.run();
 

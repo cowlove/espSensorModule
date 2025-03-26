@@ -3,6 +3,17 @@
 #include "espNowMux.h"
 #include "reliableStream.h"
 #include "Arduino_CRC32.h" 
+#ifndef CSIM
+#include "DHT.h"
+#else 
+struct DHT {
+    DHT(int, int) {}
+    void begin() {}
+    float readTemperature() { return 27.01; }
+};
+#define DHT22 0
+
+#endif
 
 #include <string>
 #include <vector>
@@ -100,8 +111,7 @@ protected:
     friend Sensor;
     bool seen = false;
 public:
-    bool isClient;
-    RemoteSensorModule(const char *_mac, const char *_schema = "", bool _isClient = false) : mac(_mac), schema(_schema), isClient(_isClient) {
+    RemoteSensorModule(const char *_mac, const char *_schema = "") : mac(_mac), schema(_schema) {
         for(auto p : requiredFields) { 
             if (strstr(schema.c_str(), p) == NULL)
                 schema = string(p) + " " + schema;
@@ -140,7 +150,10 @@ public:
         }
         return r;
     }
-
+    void beginClient() { 
+        for(auto i : sensors)  
+            i->begin();
+    }
     string makeAllResults() { 
         string r;
         findByName(specialWords.MAC)->result = this->mac;
@@ -193,11 +206,14 @@ public:
 
     string makeAllSetValues() {
         string r;
+#if 0 
+        // TODO set values not really working, need to clean up 
         for(auto i : sensors) { 
             if (i->isOutput) {
                 r += i->name + "=" + i->result + " ";
             }
         }
+#endif
         return r;
     }
 
@@ -284,12 +300,28 @@ SchemaParser::RegisterClass SensorADC::reg([](const string &s)->Sensor * {
 });
 
 class SensorDHT : public Sensor { 
+    DHT dht;
     int pin;
 public:
-    SensorDHT(RemoteSensorModule *p, const char *n, int _pin) : Sensor(p, n), pin(_pin) {}    
-    void begin() {}
-    string makeSchema() { return sfmt("DHT%d", pin); }
-    string makeReport() { return sfmt("%f", 12.34 + (millis() % 573) / 1000.0); }
+    SensorDHT(RemoteSensorModule *p, const char *n, int _pin) : Sensor(p, n), pin(_pin), dht(_pin, DHT22) {}    
+    void begin() override { 
+        OUT("DHT.begin()"); 
+        pinMode(pin, INPUT_PULLUP); 
+        dht.begin(); 
+    }
+    string makeSchema() override { return sfmt("DHT%d", pin); }
+    string makeReport() override {
+        float t, h;
+        for(int retries = 0; retries < 5; retries++) { 
+            t = dht.readTemperature();
+            h = dht.readHumidity();
+            if (!isnan(t) && !isnan(h))
+                break;
+            wdtReset();
+            delay(1000);
+        } 
+        return sfmt("%.2f,%.2f", t, h);
+    }
     static SchemaParser::RegisterClass reg;
 };
 
@@ -329,10 +361,10 @@ class SensorOutput : public Sensor {
 public:
     SensorOutput(RemoteSensorModule *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {
         isOutput = true;
-        if (p == NULL || p->isClient) // HACK TODO: p is set if called from server 
-            setValue(sfmt("%d", mode)); //called from server
     }    
-    //void begin() { pinMode(pin, OUTPUT); digitalWrite(pin, mode); }
+    void begin() { 
+        setValue(sfmt("%d", mode)); 
+    }
     string makeSchema() { return sfmt("OUTPUT%d,%d", pin, mode); }
     string makeReport() { return sfmt("%d", digitalRead(pin)); }
     void setValue(const string &s) { 
@@ -392,9 +424,7 @@ class RemoteSensorServer : public RemoteSensorProtocol {
     int serverSleepSeconds = 300;
     int serverSleepLinger = 60;
 public: 
-    RemoteSensorServer(vector<RemoteSensorModule *> m) : modules(m) {
-        for(RemoteSensorModule *p : modules) p->isClient = false;
-    }    
+    RemoteSensorServer(vector<RemoteSensorModule *> m) : modules(m) {}    
     void onReceive(const string &s) {
         if (s.find(specialWords.ACK) == 0) 
             return;
@@ -519,7 +549,7 @@ public:
     void init(const string &schema) { 
         if (array != NULL) delete array;
         array = new RemoteSensorModule(mac.c_str(), schema.c_str());
-        array->isClient = true;
+        array->beginClient();
         lastReceive = millis();
     }
     void updateFirmware() {
