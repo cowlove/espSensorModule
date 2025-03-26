@@ -590,7 +590,7 @@ public:
                 lastReceive = millis();
             }
         } else { 
-            if (array != NULL && (j.once() || j.secTick(.5))) { 
+            if (array != NULL && (j.once() || j.secTick(.2))) { 
                 string out = array->makeAllResults() + "ENDLINE=1 ";
                 write(out);
             }

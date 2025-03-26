@@ -29,10 +29,12 @@ public:
 RemoteSensorServer server(6, { &ambientTempSensor1, &at2, &at3 });
         
 RemoteSensorClient client1, client2, client3;
+SPIFFSVariable<vector<string>> logFile("/logFile", {}); 
 
 
 bool isServer() { 
-    return getMacAddress() == "D48AFCA4AF20" || getMacAddress() == "083AF2B59110";
+    return getMacAddress() == "D48AFCA4AF20" || getMacAddress() == "083AF2B59110" 
+        || getMacAddress() == "E4B063417040";
 }
 void setup() {
     //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout 
@@ -52,22 +54,10 @@ void setup() {
         delay(1000);
     }
 #endif
-#ifdef CSIM
-    client1.csimOverrideMac("MAC1");
-    client2.csimOverrideMac("MAC2");
-    client3.csimOverrideMac("MAC3");
-#endif
-
 }
 
 void loop() {
     j.run();
-#ifdef CSIM
-    client1.run();
-    client2.run();
-    client3.run();
-    server.run();
-#endif
 
     if (isServer()) { 
         server.run();
