@@ -10,6 +10,7 @@ struct DHT {
     DHT(int, int) {}
     void begin() {}
     float readTemperature() { return 27.01; }
+    float readHumidity() { return 57.02; }
 };
 #define DHT22 0
 
@@ -362,7 +363,7 @@ public:
     SensorOutput(RemoteSensorModule *p, const char *n, int pi, int m) : Sensor(p, n), pin(pi), mode(m) {
         isOutput = true;
     }    
-    void begin() { 
+    void begin() override { 
         setValue(sfmt("%d", mode)); 
     }
     string makeSchema() { return sfmt("OUTPUT%d,%d", pin, mode); }
