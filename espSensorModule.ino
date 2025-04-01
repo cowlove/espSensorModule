@@ -30,12 +30,12 @@ public:
 
 RemoteSensorServer server({ &ambientTempSensor1, &at2, &at3 });
         
-RemoteSensorClient client1, client2, client3;
+RemoteSensorClient client1;
 SPIFFSVariable<vector<string>> logFile("/logFile", {}); 
 
 bool isServer() { 
     return getMacAddress() == "D48AFCA4AF20" || getMacAddress() == "083AF2B59110" 
-        || getMacAddress() == "E4B063417040";
+        || getMacAddress() == "E4B063417040" || getMacAddress() == "FFEEDDAABBCC";
 }
 void setup() {
     //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout 
@@ -44,35 +44,67 @@ void setup() {
     }
     j.begin();    
     j.run();
-
-#ifdef CSIM
-    if (csim_flags.OneProg) { 
-        client1.csimOverrideMac("MAC1");
-        client2.csimOverrideMac("MAC2");
-        client3.csimOverrideMac("MAC3");
-    }
-#endif
 }
+
+void deepSleep(int ms); 
 
 void loop() {
     j.run();
-#ifdef CSIM
-    if (csim_flags.OneProg) { 
-        client1.run();
-        client2.run();
-        client3.run();
-        server.run();
-    }
-#endif
 
     if (isServer()) { 
         server.run();
-//        ambientTempSensor1.v.result = sfmt("X%dY", millis() / 1000);
-//        if (ambientTempSensor1.updated()) {
-//            OUT("results: %f %f", ambientTempSensor1.tempC.asFloat(), ambientTempSensor1.battery.asFloat());
-//        }
+        if (j.secTick(10)) { 
+            OUT("%09.3f seen %d sleep req %.1f", millis()/1000.0, server.countSeen(), server.getSleepRequest());
+        }
+        float sleepSec = server.getSleepRequest();
+        if (sleepSec > 0) {
+            server.prepareSleep(sleepSec); 
+            deepSleep(sleepSec * 1000 - 10000);
+        }
     } else { 
         client1.run();
     }
     delay(1);
 }
+
+
+void deepSleep(int ms) { 
+    OUT("%09.3f DEEP SLEEP for %dms", millis() / 1000.0, ms);
+    esp_sleep_enable_timer_wakeup(1000LL * ms);
+    fflush(stdout);
+    uart_tx_wait_idle(CONFIG_CONSOLE_UART_NUM);
+    esp_deep_sleep_start();        
+}
+
+
+#ifdef CSIM
+RemoteSensorClient client2, client3;
+
+class Csim : public ESP32sim_Module {
+    string dummy;
+    public:
+    Csim() {
+        ESPNOW_sendHandler = new ESPNOW_csimOneProg();
+        csim_flags.OneProg = true;
+    }
+    void parseArg(char **&a, char **la) override {
+        if (strcmp(*a, "--dummy") == 0) dummy = *(++a);
+    }
+    void setup() override {
+        client1.csimOverrideMac("MAC1");
+        client2.csimOverrideMac("MAC2");
+        client3.csimOverrideMac("MAC3");
+        onDeepSleep([](uint64_t usec) {
+            client1.setPartialDeepSleep(usec);
+            client2.setPartialDeepSleep(usec);
+            client3.setPartialDeepSleep(usec);
+        });
+    }
+    void loop() override {
+        client1.run();
+        client2.run();
+        client3.run();
+    }
+
+} csim;
+#endif
