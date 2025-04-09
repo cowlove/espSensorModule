@@ -1,6 +1,7 @@
 #include "jimlib.h"
 JStuff j;
 #include "sensorNetworkEspNOW.h"
+#include "serialLog.h"
 
 CLI_VARIABLE_FLOAT(x, 800);
 
@@ -44,13 +45,10 @@ void setup() {
     }
     j.begin();    
     j.run();
+    SPIFFSVariableESP32Base::begin();
 }
-
-void deepSleep(int ms); 
-
 void loop() {
     j.run();
-
     if (isServer()) { 
         server.run();
         if (j.secTick(10)) { 
@@ -66,16 +64,6 @@ void loop() {
     }
     delay(1);
 }
-
-
-void deepSleep(int ms) { 
-    OUT("%09.3f DEEP SLEEP for %dms", millis() / 1000.0, ms);
-    esp_sleep_enable_timer_wakeup(1000LL * ms);
-    fflush(stdout);
-    uart_tx_wait_idle(CONFIG_CONSOLE_UART_NUM);
-    esp_deep_sleep_start();        
-}
-
 
 #ifdef CSIM
 RemoteSensorClient client2, client3;

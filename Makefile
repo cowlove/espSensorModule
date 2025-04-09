@@ -10,7 +10,7 @@ else
 	BUILD_EXTRA_FLAGS += -DI2S
 endif
 
-GIT_VERSION := "$(shell git describe --abbrev=4 --dirty --always --tags)"
+GIT_VERSION := "$(shell git describe --abbrev=6 --dirty --always --tags)"
 BUILD_EXTRA_FLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 
 include ${HOME}/Arduino/libraries/makeEspArduino/makeEspArduino.mk
