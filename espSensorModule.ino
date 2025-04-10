@@ -51,13 +51,13 @@ void loop() {
     j.run();
     if (isServer()) { 
         server.run();
-        if (j.secTick(10)) { 
-            OUT("%09.3f seen %d sleep req %.1f", millis()/1000.0, server.countSeen(), server.getSleepRequest());
-        }
         float sleepSec = server.getSleepRequest();
+        if (j.secTick(10)) { 
+            OUT("seen %d sleep req %.1f", server.countSeen(), sleepSec);
+        }
         if (sleepSec > 0) {
             server.prepareSleep(sleepSec); 
-            deepSleep(sleepSec * 1000 - 10000);
+            deepSleep(sleepSec * 1000);
         }
     } else { 
         client1.run();
@@ -79,13 +79,14 @@ class Csim : public ESP32sim_Module {
         if (strcmp(*a, "--dummy") == 0) dummy = *(++a);
     }
     void setup() override {
+        SPIFFSVariableESP32Base::begin(); // hush up artificial warnings about early access
         client1.csimOverrideMac("MAC1");
         client2.csimOverrideMac("MAC2");
         client3.csimOverrideMac("MAC3");
-        onDeepSleep([](uint64_t usec) {
-            client1.setPartialDeepSleep(usec);
-            client2.setPartialDeepSleep(usec);
-            client3.setPartialDeepSleep(usec);
+        csim_onDeepSleep([](uint64_t us) {
+            client1.prepareSleep(us / 1000);
+            client2.prepareSleep(us / 1000);
+            client3.prepareSleep(us / 1000);
         });
     }
     void loop() override {
