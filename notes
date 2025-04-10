@@ -1,0 +1,6 @@
+BROKEN:  
+If --fail espnow is set high enough, some of 3 three csim clients get zero traffic through. 
+Probably a simulation artifact.  Probably would help if all csim espnowmux clients got 
+a copy of every traffic, rather than stealing it from each other all the time 
+! 
+./csim --fail espnow=.3 | grep MAC3 
