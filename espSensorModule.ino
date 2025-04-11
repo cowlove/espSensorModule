@@ -91,8 +91,11 @@ class Csim : public ESP32sim_Module {
     }
     void loop() override {
         client1.run();
-        client2.run();
+        server.run();
+	client2.run();
+	server.run();
         client3.run();
+	server.run();
     }
 
 } csim;
