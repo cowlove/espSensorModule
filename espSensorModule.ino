@@ -68,10 +68,10 @@ void loop() {
 #ifdef CSIM
 RemoteSensorClient client2, client3;
 
-class Csim : public ESP32sim_Module {
+class SketchCsim : public Csim_Module {
     string dummy;
     public:
-    Csim() {
+    SketchCsim() {
         ESPNOW_sendHandler = new ESPNOW_csimOneProg();
         csim_flags.OneProg = true;
     }
