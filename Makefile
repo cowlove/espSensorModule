@@ -8,11 +8,11 @@ BOARD_OPTIONS = PartitionScheme=min_spiffs
 
 ifeq ($(BOARD),esp32s3)
 	BOARD_OPTIONS := ${BOARD_OPTIONS},CDCOnBoot=cdc
-	PORT=/dev/ttyACM0
+	PORT ?= /dev/ttyACM0
 endif
 ifeq ($(BOARD),esp32c3)
 	BOARD_OPTIONS := ${BOARD_OPTIONS},CDCOnBoot=cdc
-	PORT=/dev/ttyACM0
+	PORT ?= /dev/ttyACM0
 endif
 
 CCACHE=ccache
@@ -51,9 +51,13 @@ clean-all:
 ##############################################
 # CSIM rules 
 
+
 CSIM_BUILD_DIR=./build/csim
-CSIM_LIBS=esp32jimlib esp32csim Arduino_CRC32 ArduinoJson
+CSIM_LIBS=esp32jimlib Arduino_CRC32 ArduinoJson Adafruit_HX711
+CSIM_LIBS+=esp32csim
 CSIM_SRC_DIRS=$(foreach L,$(CSIM_LIBS),${HOME}/Arduino/libraries/${L}/src)
+CSIM_SRC_DIRS+=$(foreach L,$(CSIM_LIBS),${HOME}/Arduino/libraries/${L})
+CSIM_SRC_DIRS+=$(foreach L,$(CSIM_LIBS),${HOME}/Arduino/libraries/${L}/src/csim_include)
 CSIM_SRCS=$(foreach DIR,$(CSIM_SRC_DIRS),$(wildcard $(DIR)/*.cpp)) 
 CSIM_SRC_WITHOUT_PATH = $(notdir $(CSIM_SRCS))
 CSIM_OBJS=$(CSIM_SRC_WITHOUT_PATH:%.cpp=${CSIM_BUILD_DIR}/%.o)
