@@ -6,3 +6,13 @@ a copy of every traffic, rather than stealing it from each other all the time
 TODO:  Handle optional startup delay for reading dht sensor if using a gpio pin as VCC
 
 ./csim --fail espnow=.3 | grep MAC3 
+
+#notes on building with esp32 3.2.0 and espMakeArduino:
+need to checkout own version of ESP_ROOT to ~/esp32
+need to edit out 0xD100 line from boards.txt
+need to explicitly specify libraries 
+
+make -f ~/Arduino/libraries/makeEspArduino/makeEspArduino.mk CHIP=esp32 BOARD=esp32 ESP_ROOT=~/esp32         "LIBS=$(echo ${HOME}/Arduino/libraries/{esp32jimlib,Arduino_CRC32,Adafruit_HX711,PubSubClient,\
+OneWireNg,ArduinoJson,DHT_sensor_library,Adafruit_Unified_Sensor,esp32-micro-sdcard})"     PART_FILE=/home/jim/esp32/tools/partitions/min_spiffs.csv    UPLOAD_PORT=/dev/ttyUSB0         VERBOSE=1    
+
+
