@@ -72,7 +72,7 @@ void loop() {
 RemoteSensorClient client2, client3;
 
 class SketchCsim : public Csim_Module {
-    CsimHx711 hx = CsimHx711(22, 23);
+    CsimHx711 hx = CsimHx711(23, 18);
 public:
     SketchCsim() {
         ESPNOW_sendHandler = new ESPNOW_csimOneProg();
