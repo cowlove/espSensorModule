@@ -42,6 +42,7 @@ bool isServer() {
     return getMacAddress() == "0CB815C2412C" || getMacAddress() == "083AF2B59110" 
         || getMacAddress() == "MAC=CCBA9716E0D8" || getMacAddress() == "FFEEDDAABBCC";
 }
+
 void setup() {
     //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout 
     j.jw.enabled = false;
@@ -69,38 +70,17 @@ void loop() {
 }
 
 #ifdef CSIM
-RemoteSensorClient client2, client3;
+Csim_RemoteSensorClientContext client2(0xffff1), client3(0xffff2);
 
 class SketchCsim : public Csim_Module {
     CsimHx711 hx = CsimHx711(23, 18);
 public:
     SketchCsim() {
-        ESPNOW_sendHandler = new ESPNOW_csimOneProg();
-        csim_flags.OneProg = true;
+        defaultContext.espnow = new ESPNOW_csimOneProg();
     }
-    void parseArg(char **&a, char **la) override {
-//        if (strcmp(*a, "--dummy") == 0) dummy = *(++a);
-    }
-    void setup() override {
-        SPIFFSVariableESP32Base::begin(); // hush up artificial warnings about early access
-        client1.csimOverrideMac("MAC1");
-        client2.csimOverrideMac("MAC2");
-        client3.csimOverrideMac("MAC3");
-        csim_onDeepSleep([](uint64_t us) {
-            client1.prepareSleep(us / 1000);
-            client2.prepareSleep(us / 1000);
-            client3.prepareSleep(us / 1000);
-        });
-    }
+    void setup() override {}
     void loop() override {
-        client1.run();
-        server.run();
-        client2.run();
-        server.run();
-        client3.run();
-        server.run();
         hx.setResult(3333);
     }
-
 } csim;
 #endif

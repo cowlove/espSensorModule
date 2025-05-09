@@ -1,3 +1,7 @@
+TODO: working on csim contexts, kinda works.  Seems context isn't yet in place
+for the constructors 
+
+
 BROKEN:  
 If --fail espnow is set high enough, some of 3 three csim clients get zero traffic through. 
 Probably a simulation artifact.  Probably would help if all csim espnowmux clients got 
